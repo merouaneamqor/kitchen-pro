@@ -13,13 +13,17 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     npm \
     sqlite3 \
-    libsqlite3-dev
+    libsqlite3-dev \
+    libicu-dev
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip calendar
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip calendar intl
+
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
 
 # Install SQLite extension
 RUN docker-php-ext-install pdo_sqlite
