@@ -136,3 +136,4 @@ Krayin CRM is a fully open-source CRM framework which will always be free under 
 
 Please don't disclose security vulnerabilities publicly. If you find any security vulnerability in Krayin CRM then please email us: sales@krayincrm.com.
 # kitchen-pro
+# kitchen-pro
