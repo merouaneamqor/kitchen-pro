@@ -61,7 +61,7 @@ services:
     image: redis:alpine
     container_name: krayin-crm-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     networks:
       - krayin-network
 

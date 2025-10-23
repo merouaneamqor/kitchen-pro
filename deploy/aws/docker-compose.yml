@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: krayin-app:latest
+    environment:
+      - APP_ENV=production
+    env_file:
+      - .env
+    networks:
+      - krayin-network
+    restart: always
+
+  nginx:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile.nginx
+    image: krayin-nginx:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - krayin-network
+    restart: always
+
+networks:
+  krayin-network:
+    driver: bridge
+
