@@ -14,7 +14,6 @@ jobs:
       FTP_USER: ${{ secrets.FTP_USER }}
       FTP_PASS: ${{ secrets.FTP_PASS }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
-      SITE_URL: ${{ secrets.SITE_URL }}
       DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
     steps:
       - name: Checkout
@@ -93,7 +92,7 @@ jobs:
           bye"
 
       - name: Create extractor script
-        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.SITE_URL != '' && env.DEPLOY_TOKEN != '' }}
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
         run: |
           cat > deploy-extract.php <<'PHP'
           <?php
@@ -113,7 +112,7 @@ jobs:
           sed -i "s/{{TOKEN}}/${DEPLOY_TOKEN}/g" deploy-extract.php
 
       - name: Upload extractor via FTP
-        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.SITE_URL != '' && env.DEPLOY_TOKEN != '' }}
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
         run: |
           lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
@@ -124,9 +123,4 @@ jobs:
           cd htdocs;
           put -O . deploy-extract.php;
           bye"
-
-      - name: Trigger extraction
-        if: ${{ env.SITE_URL != '' && env.DEPLOY_TOKEN != '' }}
-        run: |
-          curl -fsSL --retry 3 --retry-delay 3 "${SITE_URL%/}/deploy-extract.php?token=${DEPLOY_TOKEN}"
 
