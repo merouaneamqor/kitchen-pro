@@ -1,0 +1,60 @@
+name: Build shared-hosting ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, intl, gd, bcmath, zip, pdo_mysql
+          coverage: none
+
+      - name: Install Composer deps
+        run: composer install --no-dev --optimize-autoloader --prefer-dist --ignore-platform-req=ext-calendar
+
+      - name: Build assets
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: npm ci || npm install
+      - run: npm run build
+
+      - name: Prepare artifact
+        run: |
+          cp -n .env.example .env || true
+          php artisan key:generate --force
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          rm -rf storage/logs/*
+          mkdir -p storage/framework/{cache,data,sessions,views}
+          mkdir -p public/storage
+          composer dump-autoload -o
+
+      - name: Zip app
+        run: |
+          zip -r krayin-shared.zip \
+            app bootstrap config database public resources routes vendor artisan \
+            composer.json composer.lock package.json package-lock.json vite.config.js \
+            storage/lang storage/app/.gitignore storage/framework storage/logs/.gitignore \
+            .env \
+            packages \
+            --exclude "public/admin/build/*" --exclude "node_modules/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: krayin-shared
+          path: krayin-shared.zip
+
