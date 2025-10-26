@@ -9,6 +9,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      ENV_FILE: ${{ secrets.ENV_FILE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,11 +36,9 @@ jobs:
       - run: npm run build
 
       - name: Inject .env from secret (optional)
-        if: ${{ secrets.ENV_FILE != '' }}
+        if: ${{ env.ENV_FILE != '' }}
         run: |
           printf "%s" "${ENV_FILE}" > .env
-        env:
-          ENV_FILE: ${{ secrets.ENV_FILE }}
 
       - name: Prune vendor to reduce size (safe)
         run: |
@@ -71,15 +74,11 @@ jobs:
           path: krayin-shared.zip
 
       - name: Install lftp
-        if: ${{ secrets.FTP_HOST != '' && secrets.FTP_USER != '' && secrets.FTP_PASS != '' }}
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy via FTP (InfinityFree)
-        if: ${{ secrets.FTP_HOST != '' && secrets.FTP_USER != '' && secrets.FTP_PASS != '' }}
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASS: ${{ secrets.FTP_PASS }}
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
         run: |
           lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
