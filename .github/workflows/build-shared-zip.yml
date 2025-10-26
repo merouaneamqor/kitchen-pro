@@ -21,7 +21,7 @@ jobs:
           coverage: none
 
       - name: Install Composer deps
-        run: composer install --no-dev --optimize-autoloader --prefer-dist --ignore-platform-req=ext-calendar
+        run: composer install --no-dev --optimize-autoloader --prefer-dist --ignore-platform-req=ext-calendar --no-interaction --no-ansi --no-progress
 
       - name: Build assets
         uses: actions/setup-node@v4
@@ -29,6 +29,17 @@ jobs:
           node-version: '18'
       - run: npm ci || npm install
       - run: npm run build
+
+      - name: Prune vendor to reduce size (docs/tests/examples)
+        run: |
+          # Remove VCS metadata
+          find vendor -type d -name ".git" -prune -exec rm -rf {} +
+          # Remove tests directories
+          find vendor -type d \( -iname "tests" -o -iname "test" -o -iname "testing" \) -prune -exec rm -rf {} +
+          # Remove docs/examples directories
+          find vendor -type d \( -iname "docs" -o -iname "doc" -o -iname "examples" -o -iname "example" \) -prune -exec rm -rf {} +
+          # Remove common readme/markdown files
+          find vendor -type f \( -iname "README" -o -iname "README.md" -o -iname "CHANGES" -o -iname "CHANGELOG*" -o -iname "*.md" -o -iname "*.rst" \) -delete
 
       - name: Prepare artifact
         run: |
@@ -42,9 +53,9 @@ jobs:
           mkdir -p public/storage
           composer dump-autoload -o
 
-      - name: Zip app
+      - name: Zip app (max compression)
         run: |
-          zip -r krayin-shared.zip \
+          zip -r -9 krayin-shared.zip \
             app bootstrap config database public resources routes vendor artisan \
             composer.json composer.lock package.json package-lock.json vite.config.js \
             storage/lang storage/app/.gitignore storage/framework storage/logs/.gitignore \
