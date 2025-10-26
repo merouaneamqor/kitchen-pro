@@ -68,6 +68,10 @@ jobs:
             packages \
             --exclude "public/admin/build/*" --exclude "node_modules/*"
 
+      - name: Create alternate filename for FTP (binary extension)
+        run: |
+          cp krayin-shared.zip deploy.bin
+
       - name: Verify ZIP locally
         run: |
           ls -lh krayin-shared.zip || true
@@ -93,14 +97,10 @@ jobs:
           set net:max-retries 2;
           set net:timeout 20;
           set cmd:fail-exit yes;
+          set ftp:transfer-type binary;
           lcd ${GITHUB_WORKSPACE};
-          pwd;
-          cls -l;
           cd /htdocs;
-          pwd;
-          cls -l;
-          put -O /htdocs krayin-shared.zip;
-          cls -l krayin-shared.zip;
+          put -c -O /htdocs deploy.bin;
           bye"
 
       - name: Create extractor script
@@ -111,7 +111,11 @@ jobs:
           $expected = '{{TOKEN}}';
           if (!isset($_GET['token']) || $_GET['token'] !== $expected) { http_response_code(403); exit('Forbidden'); }
           if (!class_exists('ZipArchive')) { http_response_code(500); exit('ZipArchive not available'); }
-          $zipPath = __DIR__ . '/krayin-shared.zip';
+          $zipPath = __DIR__ . '/deploy.bin';
+          if (!file_exists($zipPath)) {
+              $alt = __DIR__ . '/krayin-shared.zip';
+              if (file_exists($alt)) { $zipPath = $alt; }
+          }
           if (!file_exists($zipPath)) { http_response_code(404); exit('ZIP not found'); }
           $zip = new ZipArchive();
           if ($zip->open($zipPath) !== true) { http_response_code(500); exit('Cannot open zip'); }
