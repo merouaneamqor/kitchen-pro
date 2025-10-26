@@ -97,7 +97,6 @@ jobs:
           set net:max-retries 2;
           set net:timeout 20;
           set cmd:fail-exit yes;
-          set ftp:transfer-type binary;
           lcd ${GITHUB_WORKSPACE};
           cd /htdocs;
           put -c -O /htdocs deploy.bin;
