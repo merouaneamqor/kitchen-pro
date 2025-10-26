@@ -68,6 +68,11 @@ jobs:
             packages \
             --exclude "public/admin/build/*" --exclude "node_modules/*"
 
+      - name: Verify ZIP locally
+        run: |
+          ls -lh krayin-shared.zip || true
+          sha256sum krayin-shared.zip || true
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -87,9 +92,15 @@ jobs:
           set ssl:verify-certificate no;
           set net:max-retries 2;
           set net:timeout 20;
+          set cmd:fail-exit yes;
           lcd ${GITHUB_WORKSPACE};
-          cd htdocs;
-          put -O . krayin-shared.zip;
+          pwd;
+          cls -l;
+          cd /htdocs;
+          pwd;
+          cls -l;
+          put -O /htdocs krayin-shared.zip;
+          cls -l krayin-shared.zip;
           bye"
 
       - name: Create extractor script
