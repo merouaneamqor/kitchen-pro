@@ -87,6 +87,7 @@ jobs:
           set ssl:verify-certificate no;
           set net:max-retries 2;
           set net:timeout 20;
+          lcd ${GITHUB_WORKSPACE};
           cd htdocs;
           put -O . krayin-shared.zip;
           bye"
