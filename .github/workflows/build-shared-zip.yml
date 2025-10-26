@@ -30,6 +30,13 @@ jobs:
       - run: npm ci || npm install
       - run: npm run build
 
+      - name: Inject .env from secret (optional)
+        if: ${{ secrets.ENV_FILE != '' }}
+        run: |
+          printf "%s" "${ENV_FILE}" > .env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+
       - name: Prune vendor to reduce size (safe)
         run: |
           # Remove VCS metadata only (safe)
@@ -62,4 +69,31 @@ jobs:
         with:
           name: krayin-shared
           path: krayin-shared.zip
+
+      - name: Install lftp
+        if: ${{ secrets.FTP_HOST != '' && secrets.FTP_USER != '' && secrets.FTP_PASS != '' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy via FTP (InfinityFree)
+        if: ${{ secrets.FTP_HOST != '' && secrets.FTP_USER != '' && secrets.FTP_PASS != '' }}
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: |
+          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode on;
+          set ftp:ssl-allow yes;
+          set ssl:verify-certificate no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          lcd ${GITHUB_WORKSPACE};
+          cd htdocs;
+          mirror -R --parallel=4 --verbose --only-newer \
+            --exclude-glob .git* \
+            --exclude-glob node_modules \
+            --exclude-glob .github \
+            --exclude-glob "*.map" \
+            . .;
+          bye"
 
