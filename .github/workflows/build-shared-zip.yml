@@ -9,6 +9,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
+    env:
+      FTP_HOST: ${{ vars.FTP_HOST || secrets.FTP_HOST }}
+      FTP_USER: ${{ vars.FTP_USER || secrets.FTP_USER }}
+      FTP_PASS: ${{ vars.FTP_PASS || secrets.FTP_PASS }}
+      ENV_FILE: ${{ vars.ENV_FILE || secrets.ENV_FILE }}
+      DEPLOY_TOKEN: ${{ vars.DEPLOY_TOKEN || secrets.DEPLOY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,8 +64,104 @@ jobs:
             packages \
             --exclude "public/admin/build/*" --exclude "node_modules/*"
 
+      - name: Create alternate filename for FTP (binary extension)
+        run: |
+          cp krayin-shared.zip deploy.bin
+
+      - name: Verify ZIP locally
+        run: |
+          ls -lh krayin-shared.zip || true
+          sha256sum krayin-shared.zip || true
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: krayin-shared
           path: krayin-shared.zip
+
+      - name: Send Discord notification
+        run: |
+          echo "🔔 Sending Discord notification..."
+          curl -X POST \
+               -H "Content-Type: application/json" \
+               -d "{\"content\": \"🚀 Build completed! Download artifact: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts\"}" \
+               https://discord.com/api/webhooks/1432757619977621525/LeBFP839I_y_OFt__ep-5R3YB2_I042O52vhu4DfOPakxHZy-sX_RTaC3h4pHqAqBApJ
+
+      - name: Install lftp
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Upload ZIP via FTP
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
+        run: |
+          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode on;
+          set ftp:ssl-allow yes;
+          set ssl:verify-certificate no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy.bin;
+          bye" || lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode off;
+          set ftp:ssl-allow no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy.bin;
+          bye"
+
+      - name: Create extractor script
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
+        run: |
+          cat > deploy-extract.php <<'PHP'
+          <?php
+          $token = '{{TOKEN}}';
+          if (!isset($_GET['token']) || $_GET['token'] !== $token) {
+              http_response_code(403);
+              exit('Forbidden');
+          }
+
+          $zipPath = __DIR__ . '/deploy.bin';
+          if (!file_exists($zipPath)) {
+              $zipPath = __DIR__ . '/krayin-shared.zip';
+          }
+
+          if (!file_exists($zipPath)) {
+              http_response_code(404);
+              exit('ZIP not found');
+          }
+
+          $zip = new ZipArchive();
+          if ($zip->open($zipPath) !== true) {
+              http_response_code(500);
+              exit('Cannot open ZIP');
+          }
+
+          $zip->extractTo(__DIR__);
+          $zip->close();
+          unlink($zipPath);
+          unlink(__FILE__);
+          echo 'OK';
+          PHP
+          sed -i "s/{{TOKEN}}/${DEPLOY_TOKEN}/g" deploy-extract.php
+
+      - name: Upload extractor via FTP
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
+        run: |
+          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode on;
+          set ftp:ssl-allow yes;
+          set ssl:verify-certificate no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy-extract.php;
+          bye" || lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode off;
+          set ftp:ssl-allow no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy-extract.php;
+          bye"
