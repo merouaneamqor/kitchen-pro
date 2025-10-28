@@ -88,230 +88,78 @@ jobs:
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Upload ZIP via FTP (InfinityFree)
+      - name: Upload ZIP via FTP
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
         run: |
-          echo "🚀 Starting FTP upload to $FTP_HOST..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📄 File to upload: deploy.bin"
-          echo "📊 File size: $(ls -lh deploy.bin)"
-          echo "🔑 FTP User: $FTP_USER"
-          echo "🌐 FTP Host: $FTP_HOST"
-
-          # First, test basic FTP connection
-          echo "🔗 Testing basic FTP connection..."
-          if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
           set ftp:ssl-allow yes;
           set ssl:verify-certificate no;
-          set net:timeout 10;
-          pwd;
-          ls;
-          bye" 2>&1; then
-            echo "✅ Basic FTP connection successful"
-          else
-            echo "❌ Basic FTP connection failed, trying without SSL..."
-            if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-            set ftp:passive-mode off;
-            set ftp:ssl-allow no;
-            set net:timeout 10;
-            pwd;
-            ls;
-            bye" 2>&1; then
-              echo "✅ Basic FTP connection successful (no SSL)"
-              USE_SSL=false
-            else
-              echo "❌ FTP connection completely failed!"
-              echo "💡 Check your FTP credentials and network"
-              exit 1
-            fi
-          fi
-
-          # Try different FTP paths for InfinityFree
-          UPLOAD_PATH=""
-          for FTP_PATH in "/htdocs" "/" "htdocs" "."; do
-            echo "🔄 Trying FTP path: $FTP_PATH"
-
-            if [ "$USE_SSL" != "false" ]; then
-              # Try with SSL first
-              if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-              set ftp:passive-mode on;
-              set ftp:ssl-allow yes;
-              set ssl:verify-certificate no;
-              set net:max-retries 1;
-              set net:timeout 15;
-              set cmd:fail-exit yes;
-              lcd ${GITHUB_WORKSPACE};
-              cd $FTP_PATH 2>/dev/null && echo 'Changed to $FTP_PATH' || echo 'Cannot cd to $FTP_PATH';
-              pwd;
-              put -c deploy.bin 2>/dev/null && echo 'Upload completed' || echo 'Upload failed';
-              ls -la deploy.bin 2>/dev/null && echo 'File verified' || echo 'File not found after upload';
-              bye" 2>&1 | grep -q "File verified"; then
-                echo "✅ Successfully uploaded to $FTP_PATH (SSL)"
-                UPLOAD_PATH="$FTP_PATH"
-                break
-              fi
-            fi
-
-            # Try without SSL
-            if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-            set ftp:passive-mode off;
-            set ftp:ssl-allow no;
-            set net:max-retries 1;
-            set net:timeout 15;
-            set cmd:fail-exit yes;
-            lcd ${GITHUB_WORKSPACE};
-            cd $FTP_PATH 2>/dev/null && echo 'Changed to $FTP_PATH' || echo 'Cannot cd to $FTP_PATH';
-            pwd;
-            put -c deploy.bin 2>/dev/null && echo 'Upload completed' || echo 'Upload failed';
-            ls -la deploy.bin 2>/dev/null && echo 'File verified' || echo 'File not found after upload';
-            bye" 2>&1 | grep -q "File verified"; then
-              echo "✅ Successfully uploaded to $FTP_PATH (no SSL)"
-              UPLOAD_PATH="$FTP_PATH"
-              break
-            else
-              echo "❌ Failed to upload to $FTP_PATH"
-            fi
-          done
-
-          if [ -z "$UPLOAD_PATH" ]; then
-            echo "❌ FTP upload failed completely!"
-            echo "💡 Possible issues:"
-            echo "   - FTP credentials incorrect"
-            echo "   - FTP server blocking uploads"
-            echo "   - Insufficient permissions"
-            echo "   - Network/firewall issues"
-            exit 1
-          fi
-
-          echo "🎉 Upload successful! Files uploaded to: $UPLOAD_PATH"
-          # Store the upload path for the extractor script
-          echo "UPLOAD_PATH=$UPLOAD_PATH" >> $GITHUB_ENV
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy.bin;
+          bye" || lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode off;
+          set ftp:ssl-allow no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy.bin;
+          bye"
 
       - name: Create extractor script
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
         run: |
           cat > deploy-extract.php <<'PHP'
           <?php
-          $expected = '{{TOKEN}}';
-          if (!isset($_GET['token']) || $_GET['token'] !== $expected) { http_response_code(403); exit('Forbidden'); }
-
-          // Debug information
-          echo "🔍 Debug Info:<br>";
-          echo "Current directory: " . __DIR__ . "<br>";
-          echo "Files in directory: " . implode(', ', scandir(__DIR__)) . "<br>";
-          echo "Upload path used: {{UPLOAD_PATH}}<br>";
-
-          if (!class_exists('ZipArchive')) { http_response_code(500); exit('ZipArchive not available'); }
-
-          // Try multiple possible locations for the ZIP file
-          $possiblePaths = [
-              __DIR__ . '/deploy.bin',
-              __DIR__ . '/krayin-shared.zip',
-              dirname(__DIR__) . '/deploy.bin',
-              dirname(__DIR__) . '/krayin-shared.zip'
-          ];
-
-          $zipPath = null;
-          foreach ($possiblePaths as $path) {
-              echo "Looking for: $path<br>";
-              if (file_exists($path)) {
-                  $zipPath = $path;
-                  echo "✅ Found ZIP file: $path<br>";
-                  break;
-              }
+          $token = '{{TOKEN}}';
+          if (!isset($_GET['token']) || $_GET['token'] !== $token) {
+              http_response_code(403);
+              exit('Forbidden');
           }
 
-          if (!$zipPath) {
+          $zipPath = __DIR__ . '/deploy.bin';
+          if (!file_exists($zipPath)) {
+              $zipPath = __DIR__ . '/krayin-shared.zip';
+          }
+
+          if (!file_exists($zipPath)) {
               http_response_code(404);
-              echo "<br>❌ ZIP file not found in any of these locations:<br>";
-              foreach ($possiblePaths as $path) {
-                  echo "- $path (" . (file_exists($path) ? 'exists' : 'not found') . ")<br>";
-              }
-              echo "<br>Available files in " . __DIR__ . ":<br>";
-              foreach (scandir(__DIR__) as $file) {
-                  if ($file !== '.' && $file !== '..') {
-                      echo "- $file (" . (is_dir(__DIR__ . '/' . $file) ? 'directory' : 'file') . ")<br>";
-                  }
-              }
-              exit('<br>❌ ZIP not found');
+              exit('ZIP not found');
           }
-
-          echo "File size: " . filesize($zipPath) . " bytes<br>";
 
           $zip = new ZipArchive();
-          $openResult = $zip->open($zipPath);
-          if ($openResult !== true) {
+          if ($zip->open($zipPath) !== true) {
               http_response_code(500);
-              exit('Cannot open zip (error code: ' . $openResult . ')');
+              exit('Cannot open ZIP');
           }
 
-          echo "ZIP contains " . $zip->numFiles . " files<br>";
-          echo "Extracting to: " . __DIR__ . "<br>";
-
-          if (!$zip->extractTo(__DIR__)) {
-              http_response_code(500);
-              exit('Extract failed');
-          }
-
+          $zip->extractTo(__DIR__);
           $zip->close();
-          @unlink($zipPath);
-          @unlink(__FILE__);
-          echo '<br>✅ OK - Extraction completed successfully!';
+          unlink($zipPath);
+          unlink(__FILE__);
+          echo 'OK';
           PHP
           sed -i "s/{{TOKEN}}/${DEPLOY_TOKEN}/g" deploy-extract.php
-          sed -i "s|{{UPLOAD_PATH}}|${UPLOAD_PATH:-htdocs}|g" deploy-extract.php
 
       - name: Upload extractor via FTP
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
         run: |
-          echo "📤 Uploading extractor script to $UPLOAD_PATH..."
           lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
           set ftp:ssl-allow yes;
           set ssl:verify-certificate no;
-          set net:max-retries 3;
-          set net:timeout 30;
-          set cmd:fail-exit yes;
-          cd ${UPLOAD_PATH:-htdocs};
-          put -O . deploy-extract.php;
-          ls -la deploy-extract.php;
-          bye" || {
-            echo "❌ Extractor upload failed, retrying with no SSL..."
-            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-            set ftp:passive-mode off;
-            set ftp:ssl-allow no;
-            set net:max-retries 3;
-            set net:timeout 30;
-            set cmd:fail-exit yes;
-            cd ${UPLOAD_PATH:-htdocs};
-            put -O . deploy-extract.php;
-            ls -la deploy-extract.php;
-            bye"
-          }
-          echo "✅ Extractor script uploaded to $UPLOAD_PATH. Access: https://$FTP_HOST/deploy-extract.php?token=$DEPLOY_TOKEN"
-
-      - name: Verify FTP upload
-        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
-        run: |
-          echo "🔍 Verifying FTP upload in $UPLOAD_PATH..."
-          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-          set ftp:passive-mode on;
-          set ftp:ssl-allow yes;
-          set ssl:verify-certificate no;
-          set net:timeout 10;
-          cd ${UPLOAD_PATH:-htdocs};
-          ls -la deploy.bin;
-          ls -la deploy-extract.php;
-          bye" || {
-            echo "⚠️  Verification with SSL failed, trying without..."
-            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-            set ftp:passive-mode on;
-            set ftp:ssl-allow no;
-            set net:timeout 10;
-            cd ${UPLOAD_PATH:-htdocs};
-            ls -la deploy.bin;
-            ls -la deploy-extract.php;
-            bye"
-          }
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy-extract.php;
+          bye" || lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode off;
+          set ftp:ssl-allow no;
+          set net:max-retries 2;
+          set net:timeout 20;
+          cd /htdocs;
+          put deploy-extract.php;
+          bye"
 
