@@ -85,11 +85,12 @@ jobs:
           path: krayin-shared.zip
 
       - name: Send Discord notification
-        if: ${{ env.FTP_HOST == '' || env.FTP_USER == '' || env.FTP_PASS == '' }}
         run: |
-          curl -H "Content-Type: application/json" \
+          echo "🔔 Sending Discord notification..."
+          curl -X POST \
+               -H "Content-Type: application/json" \
                -d "{\"content\": \"🚀 Build completed! Download artifact: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts\"}" \
-               https://discordapp.com/api/webhooks/1432757619977621525/LeBFP839I_y_OFt__ep-5R3YB2_I042O52vhu4DfOPakxHZy-sX_RTaC3h4pHqAqBApJ
+               https://discord.com/api/webhooks/1432757619977621525/LeBFP839I_y_OFt__ep-5R3YB2_I042O52vhu4DfOPakxHZy-sX_RTaC3h4pHqAqBApJ
 
       - name: Install lftp
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
