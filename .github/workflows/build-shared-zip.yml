@@ -9,12 +9,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
     env:
-      FTP_HOST: ${{ secrets.FTP_HOST }}
-      FTP_USER: ${{ secrets.FTP_USER }}
-      FTP_PASS: ${{ secrets.FTP_PASS }}
-      ENV_FILE: ${{ secrets.ENV_FILE }}
-      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      FTP_HOST: ${{ vars.FTP_HOST || secrets.FTP_HOST }}
+      FTP_USER: ${{ vars.FTP_USER || secrets.FTP_USER }}
+      FTP_PASS: ${{ vars.FTP_PASS || secrets.FTP_PASS }}
+      ENV_FILE: ${{ vars.ENV_FILE || secrets.ENV_FILE }}
+      DEPLOY_TOKEN: ${{ vars.DEPLOY_TOKEN || secrets.DEPLOY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

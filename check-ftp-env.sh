@@ -1,36 +1,21 @@
 #!/bin/bash
 
-# Check FTP Files Script
-# Manually verify what files exist on the FTP server
+# Check FTP Files using Environment Variables
+# Simplified version that uses environment variables directly
 
 set -e
 
-echo "🔍 Checking files on FTP server..."
+echo "🔍 Checking FTP files using environment variables..."
 
-# Load FTP configuration
-if [ -f ".ftp.env" ]; then
-    source .ftp.env
-elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    echo "🔑 Using GitHub CLI to fetch credentials..."
-    FTP_HOST=$(gh variable get FTP_HOST 2>/dev/null || echo "")
-    FTP_USER=$(gh variable get FTP_USER 2>/dev/null || echo "")
-    FTP_PASS=$(gh secret get FTP_PASS 2>/dev/null || echo "")
-    DEPLOY_TOKEN=$(gh secret get DEPLOY_TOKEN 2>/dev/null || echo "")
-elif [ -n "$FTP_HOST" ] && [ -n "$FTP_USER" ] && [ -n "$FTP_PASS" ]; then
-    echo "✅ Using environment variables..."
-else
-    echo "❌ Error: FTP credentials not found."
-    echo "Options:"
-    echo "1. Create .ftp.env file with FTP_HOST, FTP_USER, FTP_PASS"
-    echo "2. Install GitHub CLI and authenticate: gh auth login"
-    echo "3. Set environment variables: FTP_HOST, FTP_USER, FTP_PASS"
-    echo "4. Set GitHub repository variables: gh variable set FTP_HOST --body 'your-host'"
-    exit 1
-fi
-
-# Check if required variables are set
+# Check if required environment variables are set
 if [ -z "$FTP_HOST" ] || [ -z "$FTP_USER" ] || [ -z "$FTP_PASS" ]; then
-    echo "❌ Error: FTP_HOST, FTP_USER, and FTP_PASS must be set"
+    echo "❌ Error: Environment variables not set."
+    echo "Please set them first:"
+    echo "export FTP_HOST='your-ftp-host.com'"
+    echo "export FTP_USER='your-username'"
+    echo "export FTP_PASS='your-password'"
+    echo ""
+    echo "Or run: source .ftp.env"
     exit 1
 fi
 
@@ -74,4 +59,3 @@ bye" 2>/dev/null || {
 
 echo ""
 echo "💡 If you don't see deploy.bin or deploy-extract.php, the GitHub Actions upload failed."
-echo "💡 Try running the workflow again or check the GitHub Actions logs."
