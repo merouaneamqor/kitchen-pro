@@ -94,24 +94,79 @@ jobs:
           echo "🚀 Starting FTP upload to $FTP_HOST..."
           echo "📁 Current directory: $(pwd)"
           echo "📄 File to upload: deploy.bin"
-          echo "📊 File size: $(stat -f%z deploy.bin 2>/dev/null || stat -c%s deploy.bin 2>/dev/null || echo 'unknown')"
+          echo "📊 File size: $(ls -lh deploy.bin)"
+          echo "🔑 FTP User: $FTP_USER"
+          echo "🌐 FTP Host: $FTP_HOST"
+
+          # First, test basic FTP connection
+          echo "🔗 Testing basic FTP connection..."
+          if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode on;
+          set ftp:ssl-allow yes;
+          set ssl:verify-certificate no;
+          set net:timeout 10;
+          pwd;
+          ls;
+          bye" 2>&1; then
+            echo "✅ Basic FTP connection successful"
+          else
+            echo "❌ Basic FTP connection failed, trying without SSL..."
+            if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+            set ftp:passive-mode off;
+            set ftp:ssl-allow no;
+            set net:timeout 10;
+            pwd;
+            ls;
+            bye" 2>&1; then
+              echo "✅ Basic FTP connection successful (no SSL)"
+              USE_SSL=false
+            else
+              echo "❌ FTP connection completely failed!"
+              echo "💡 Check your FTP credentials and network"
+              exit 1
+            fi
+          fi
 
           # Try different FTP paths for InfinityFree
+          UPLOAD_PATH=""
           for FTP_PATH in "/htdocs" "/" "htdocs" "."; do
             echo "🔄 Trying FTP path: $FTP_PATH"
+
+            if [ "$USE_SSL" != "false" ]; then
+              # Try with SSL first
+              if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+              set ftp:passive-mode on;
+              set ftp:ssl-allow yes;
+              set ssl:verify-certificate no;
+              set net:max-retries 1;
+              set net:timeout 15;
+              set cmd:fail-exit yes;
+              lcd ${GITHUB_WORKSPACE};
+              cd $FTP_PATH 2>/dev/null && echo 'Changed to $FTP_PATH' || echo 'Cannot cd to $FTP_PATH';
+              pwd;
+              put -c deploy.bin 2>/dev/null && echo 'Upload completed' || echo 'Upload failed';
+              ls -la deploy.bin 2>/dev/null && echo 'File verified' || echo 'File not found after upload';
+              bye" 2>&1 | grep -q "File verified"; then
+                echo "✅ Successfully uploaded to $FTP_PATH (SSL)"
+                UPLOAD_PATH="$FTP_PATH"
+                break
+              fi
+            fi
+
+            # Try without SSL
             if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-            set ftp:passive-mode on;
-            set ftp:ssl-allow yes;
-            set ssl:verify-certificate no;
-            set net:max-retries 2;
-            set net:timeout 20;
+            set ftp:passive-mode off;
+            set ftp:ssl-allow no;
+            set net:max-retries 1;
+            set net:timeout 15;
             set cmd:fail-exit yes;
             lcd ${GITHUB_WORKSPACE};
-            cd $FTP_PATH;
-            put -c deploy.bin;
-            ls -la deploy.bin;
-            bye" 2>&1; then
-              echo "✅ Successfully uploaded to $FTP_PATH"
+            cd $FTP_PATH 2>/dev/null && echo 'Changed to $FTP_PATH' || echo 'Cannot cd to $FTP_PATH';
+            pwd;
+            put -c deploy.bin 2>/dev/null && echo 'Upload completed' || echo 'Upload failed';
+            ls -la deploy.bin 2>/dev/null && echo 'File verified' || echo 'File not found after upload';
+            bye" 2>&1 | grep -q "File verified"; then
+              echo "✅ Successfully uploaded to $FTP_PATH (no SSL)"
               UPLOAD_PATH="$FTP_PATH"
               break
             else
@@ -120,34 +175,16 @@ jobs:
           done
 
           if [ -z "$UPLOAD_PATH" ]; then
-            echo "❌ All FTP upload attempts failed, trying without SSL..."
-            for FTP_PATH in "/htdocs" "/" "htdocs" "."; do
-              echo "🔄 Trying FTP path (no SSL): $FTP_PATH"
-              if lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
-              set ftp:passive-mode off;
-              set ftp:ssl-allow no;
-              set net:max-retries 2;
-              set net:timeout 20;
-              set cmd:fail-exit yes;
-              lcd ${GITHUB_WORKSPACE};
-              cd $FTP_PATH;
-              put -c deploy.bin;
-              ls -la deploy.bin;
-              bye" 2>&1; then
-                echo "✅ Successfully uploaded to $FTP_PATH (no SSL)"
-                UPLOAD_PATH="$FTP_PATH"
-                break
-              else
-                echo "❌ Failed to upload to $FTP_PATH (no SSL)"
-              fi
-            done
-          fi
-
-          if [ -z "$UPLOAD_PATH" ]; then
             echo "❌ FTP upload failed completely!"
+            echo "💡 Possible issues:"
+            echo "   - FTP credentials incorrect"
+            echo "   - FTP server blocking uploads"
+            echo "   - Insufficient permissions"
+            echo "   - Network/firewall issues"
             exit 1
           fi
 
+          echo "🎉 Upload successful! Files uploaded to: $UPLOAD_PATH"
           # Store the upload path for the extractor script
           echo "UPLOAD_PATH=$UPLOAD_PATH" >> $GITHUB_ENV
 
