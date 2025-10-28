@@ -122,20 +122,59 @@ jobs:
           <?php
           $expected = '{{TOKEN}}';
           if (!isset($_GET['token']) || $_GET['token'] !== $expected) { http_response_code(403); exit('Forbidden'); }
+
+          // Debug information
+          echo "🔍 Debug Info:<br>";
+          echo "Current directory: " . __DIR__ . "<br>";
+          echo "Files in directory: " . implode(', ', scandir(__DIR__)) . "<br>";
+
           if (!class_exists('ZipArchive')) { http_response_code(500); exit('ZipArchive not available'); }
+
           $zipPath = __DIR__ . '/deploy.bin';
+          echo "Looking for: $zipPath<br>";
+
           if (!file_exists($zipPath)) {
+              echo "deploy.bin not found, checking krayin-shared.zip...<br>";
               $alt = __DIR__ . '/krayin-shared.zip';
-              if (file_exists($alt)) { $zipPath = $alt; }
+              echo "Looking for: $alt<br>";
+              if (file_exists($alt)) {
+                  $zipPath = $alt;
+                  echo "Found krayin-shared.zip<br>";
+              }
           }
-          if (!file_exists($zipPath)) { http_response_code(404); exit('ZIP not found'); }
+
+          if (!file_exists($zipPath)) {
+              http_response_code(404);
+              echo "<br>❌ Available files in " . __DIR__ . ":<br>";
+              foreach (scandir(__DIR__) as $file) {
+                  if ($file !== '.' && $file !== '..') {
+                      echo "- $file (" . (is_dir(__DIR__ . '/' . $file) ? 'directory' : 'file') . ")<br>";
+                  }
+              }
+              exit('<br>❌ ZIP not found');
+          }
+
+          echo "<br>✅ Found ZIP file: $zipPath<br>";
+          echo "File size: " . filesize($zipPath) . " bytes<br>";
+
           $zip = new ZipArchive();
-          if ($zip->open($zipPath) !== true) { http_response_code(500); exit('Cannot open zip'); }
-          if (!$zip->extractTo(__DIR__)) { http_response_code(500); exit('Extract failed'); }
+          if ($zip->open($zipPath) !== true) {
+              http_response_code(500);
+              exit('Cannot open zip (error code: ' . $zip->open($zipPath) . ')');
+          }
+
+          echo "ZIP contains " . $zip->numFiles . " files<br>";
+          echo "Extracting to: " . __DIR__ . "<br>";
+
+          if (!$zip->extractTo(__DIR__)) {
+              http_response_code(500);
+              exit('Extract failed');
+          }
+
           $zip->close();
           @unlink($zipPath);
           @unlink(__FILE__);
-          echo 'OK';
+          echo '<br>✅ OK - Extraction completed successfully!';
           PHP
           sed -i "s/{{TOKEN}}/${DEPLOY_TOKEN}/g" deploy-extract.php
 
@@ -165,4 +204,28 @@ jobs:
             bye"
           }
           echo "✅ Extractor script uploaded. Access: https://$FTP_HOST/deploy-extract.php?token=$DEPLOY_TOKEN"
+
+      - name: Verify FTP upload
+        if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
+        run: |
+          echo "🔍 Verifying FTP upload..."
+          lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+          set ftp:passive-mode on;
+          set ftp:ssl-allow yes;
+          set ssl:verify-certificate no;
+          set net:timeout 10;
+          cd /htdocs;
+          ls -la deploy.bin;
+          ls -la deploy-extract.php;
+          bye" || {
+            echo "⚠️  Verification with SSL failed, trying without..."
+            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+            set ftp:passive-mode on;
+            set ftp:ssl-allow no;
+            set net:timeout 10;
+            cd /htdocs;
+            ls -la deploy.bin;
+            ls -la deploy-extract.php;
+            bye"
+          }
 
