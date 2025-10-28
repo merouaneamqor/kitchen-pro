@@ -90,17 +90,30 @@ jobs:
       - name: Upload ZIP via FTP (InfinityFree)
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' }}
         run: |
+          echo "🚀 Starting FTP upload to $FTP_HOST..."
           lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
           set ftp:ssl-allow yes;
           set ssl:verify-certificate no;
-          set net:max-retries 2;
-          set net:timeout 20;
+          set net:max-retries 3;
+          set net:timeout 30;
           set cmd:fail-exit yes;
           lcd ${GITHUB_WORKSPACE};
           cd /htdocs;
           put -c -O /htdocs deploy.bin;
-          bye"
+          bye" || {
+            echo "❌ FTP upload failed, retrying with different settings..."
+            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+            set ftp:passive-mode off;
+            set ftp:ssl-allow no;
+            set net:max-retries 3;
+            set net:timeout 30;
+            set cmd:fail-exit yes;
+            lcd ${GITHUB_WORKSPACE};
+            cd /htdocs;
+            put -c -O /htdocs deploy.bin;
+            bye"
+          }
 
       - name: Create extractor script
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
@@ -129,13 +142,27 @@ jobs:
       - name: Upload extractor via FTP
         if: ${{ env.FTP_HOST != '' && env.FTP_USER != '' && env.FTP_PASS != '' && env.DEPLOY_TOKEN != '' }}
         run: |
+          echo "📤 Uploading extractor script..."
           lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
           set ftp:passive-mode on;
           set ftp:ssl-allow yes;
           set ssl:verify-certificate no;
-          set net:max-retries 2;
-          set net:timeout 20;
+          set net:max-retries 3;
+          set net:timeout 30;
+          set cmd:fail-exit yes;
           cd htdocs;
           put -O . deploy-extract.php;
-          bye"
+          bye" || {
+            echo "❌ Extractor upload failed, retrying..."
+            lftp -u "$FTP_USER","$FTP_PASS" "$FTP_HOST" -e "
+            set ftp:passive-mode off;
+            set ftp:ssl-allow no;
+            set net:max-retries 3;
+            set net:timeout 30;
+            set cmd:fail-exit yes;
+            cd htdocs;
+            put -O . deploy-extract.php;
+            bye"
+          }
+          echo "✅ Extractor script uploaded. Access: https://$FTP_HOST/deploy-extract.php?token=$DEPLOY_TOKEN"
 
